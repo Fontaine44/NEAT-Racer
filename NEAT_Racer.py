@@ -16,6 +16,8 @@ WIDTH, HEIGHT = 800, 600
 SCREEN = pygame.display.set_mode((WIDTH, HEIGHT))
 
 GRAY = (128, 128, 128)
+WHITE = (255, 255, 255)
+BLACK = (0, 0, 0)
 
 pygame.display.set_icon(pygame.image.load("icon.png"))
 pygame.display.set_caption("NEAT Racer")
@@ -24,7 +26,7 @@ CAR_SIZE = (70,150)
 CAR_IMG = pygame.image.load("car.png")
 CAR_IMG = pygame.transform.smoothscale(CAR_IMG, CAR_SIZE)
 
-OBSTACLE_SIZE = (100,60)
+OBSTACLE_SIZE = (150,60)
 OBSTACLE_IMG = pygame.image.load("obstacle.png")
 OBSTACLE_IMG = pygame.transform.smoothscale(OBSTACLE_IMG, OBSTACLE_SIZE)
 
@@ -33,6 +35,9 @@ ROAD_HEIGHT = HEIGHT
 ROAD = Rect(0,0,ROAD_WIDTH,ROAD_HEIGHT)
 
 GEN = 0
+
+UI_STARTING_POS = (ROAD_WIDTH+1,0)
+UI_RECT = Rect(UI_STARTING_POS,(WIDTH-ROAD_WIDTH,HEIGHT))
 
 
 class Car:
@@ -48,15 +53,15 @@ class Car:
         self.y = ROAD_HEIGHT - self.height - 10
         self.hitbox = Rect(self.x, self.y, self.width, self.height)
         self.score = 0
+        self.last_x = ROAD_WIDTH/2 - self.width/2
 
     def move(self, output):
         if output > 0:
             x_movement = self.SPEED
         else:
             x_movement = - self.SPEED
-        
-        self.x += x_movement
 
+        self.x += x_movement
         self.hitbox = self.hitbox.move(x_movement, 0)
         self.score += 1
 
@@ -71,7 +76,11 @@ class Car:
         return data
 
     def render(self):
-        SCREEN.blit(self.image, (self.x, self.y))
+        if abs(self.x - self.last_x) > self.SPEED :
+            SCREEN.blit(self.image, (self.x, self.y))
+            self.last_x = self.x
+        else:
+            SCREEN.blit(self.image, (self.last_x, self.y))
 
 
 class Obstacle():
@@ -103,9 +112,62 @@ class Obstacle():
         #to use a rectangle:
         #pygame.draw.rect(SCREEN, (80,250,0), self.hitbox)
 
+class Ui():
+    def __init__(self, area):
+        self.area = UI_RECT
+        self.highest_score = 0
+        self.current_score = 0
+        self.car_count = 0
+        self.font = pygame.font.SysFont(None, 40)
+        self.font2 = pygame.font.SysFont(None, 30)
+        self.font2.set_italic(True)
 
-def update_display(cars, obstacle):
+
+    def update(self, current_score, car_count):
+        self.current_score = current_score
+        self.car_count = car_count
+
+        if self.current_score > self.highest_score:
+            self.highest_score = self.current_score
+
+
+    def render(self):
+        x = UI_RECT.x
+        y = UI_RECT.y
+
+        highest_score_text = "Best score: " + str(self.highest_score)
+        highest_score_img = self.font.render(highest_score_text, True, WHITE)
+
+        current_gen_text = "Generation: " + str(GEN)
+        current_gen_img = self.font.render(current_gen_text, True, WHITE)
+
+        current_score_text = "Current score: " + str(self.current_score)
+        current_score_img = self.font.render(current_score_text, True, WHITE)
+
+        car_count_text = "# of cars remaining: " + str(self.car_count)
+        car_count_img = self.font.render(car_count_text, True, WHITE)
+
+        self.font.set_underline(True)
+        SCREEN.blit(self.font.render("Statistics", True, WHITE), (x, y))
+        self.font.set_underline(False)
+
+        SCREEN.blit(highest_score_img, (x, y + 30))
+        SCREEN.blit(current_gen_img, (x, y + 55))
+        SCREEN.blit(current_score_img, (x, y + 80))
+        SCREEN.blit(car_count_img, (x, y + 105))
+        
+        SCREEN.blit(self.font2.render("Made by Raphael Fontaine", True, WHITE), (x + 80, y + HEIGHT - 30))
+
+
+
+
+
+
+def update_display(cars, obstacle, ui):
     SCREEN.fill(GRAY, ROAD)
+    SCREEN.fill(BLACK, UI_RECT)
+
+    ui.render()
 
     for index, car in enumerate(cars):
         if car.alive:
@@ -115,7 +177,7 @@ def update_display(cars, obstacle):
     obstacle.render()
     
     # Update the display (apply the changes)
-    pygame.display.update([ROAD])
+    pygame.display.update()
 
 
 
@@ -134,6 +196,7 @@ def eval_genomes(genomes, config):
     score = 0
     FPS = 30
     fpsClock = pygame.time.Clock()
+
 
 
     # start by creating lists holding the genome itself, the
@@ -191,8 +254,10 @@ def eval_genomes(genomes, config):
                 nets.pop(x)
             
 
+        score += 1
+        UI.update(score, len(cars))
 
-        update_display(cars, obstacle)
+        update_display(cars, obstacle, UI)
         
         fpsClock.tick(FPS)
 
@@ -213,8 +278,12 @@ def run(config_file):
     p.add_reporter(stats)
     #p.add_reporter(neat.Checkpointer(5))
 
+    #Generate UI
+    global UI
+    UI = Ui(UI_RECT)
+
     # Run for up to a certain number of generations.
-    winner = p.run(eval_genomes, 20)
+    winner = p.run(eval_genomes, 30)
 
 
 if __name__ == "__main__":
